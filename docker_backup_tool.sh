@@ -16,7 +16,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 else
     echo -e "${CYAN}🛠 Configuración inicial${NC}"
-    read -p "👤 Usuario Linux (ej. guquintana): " DOCKER_USER
+    read -p "👤 Usuario Linux (ej. mrguillote): " DOCKER_USER
     read -p "📁 Ruta para guardar/restaurar backups (ej. /home/$DOCKER_USER/backups_docker): " BACKUP_DIR_PUBLIC
     read -p "🌐 Carpeta para montar volúmenes (ej. /home/$DOCKER_USER/www-docker): " MOUNT_DIR
 
