@@ -16,7 +16,6 @@ BACKUP_NAME="backup_$DATE"
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local path="$1"
-    # Reemplazar las \ por /
     path="${path//\\//}"
     if [[ "$path" =~ ^[A-Za-z]:/ ]]; then
         local drive_letter="${path:0:1}"
@@ -26,14 +25,38 @@ function fix_windows_path() {
     echo "$path"
 }
 
+function confirm_path() {
+    local final_path="$1"
+    echo -ne "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}$final_path${YELLOW} [s/N]: ${NC}"
+    read confirm
+    if [[ "$confirm" =~ ^[Ss]$ ]]; then
+        return 0
+    else
+        echo -e "${RED}🚫 Ruta cancelada por el usuario.${NC}"
+        return 1
+    fi
+}
+
 function backup() {
     echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
     read dest_dir
     dest_dir=$(fix_windows_path "$dest_dir")
-    echo -e "${YELLOW}📂 Ruta convertida a WSL: $dest_dir${NC}"
-    mkdir -p "$BACKUP_DIR_ROOT"
-    mkdir -p "$dest_dir"
+    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
 
+    if ! confirm_path "$dest_dir"; then
+        return
+    fi
+
+    if [ ! -d "$dest_dir" ]; then
+        echo -e "${YELLOW}📂 La ruta no existe. Creando: $dest_dir${NC}"
+        mkdir -p "$dest_dir"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}❌ Error al crear el directorio de destino${NC}"
+            return
+        fi
+    fi
+
+    mkdir -p "$BACKUP_DIR_ROOT"
     FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
 
     echo -e "${CYAN}📋 Guardando lista de imágenes...${NC}"
