@@ -67,8 +67,8 @@ function backup() {
 
     echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible desde Windows...${NC}"
     cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
-    chown -R guquintana:guquintana "$BACKUP_DIR_PUBLIC"
-    chmod -R u+rwX,g+rwX,o+rX "$BACKUP_DIR_PUBLIC"
+    chown -R guquintana:guquintana "$BACKUP_DIR_PUBLIC/$BACKUP_NAME"
+    chmod -R u+rwX,g+rwX,o+rX "$BACKUP_DIR_PUBLIC/$BACKUP_NAME"
 
     echo -e "${GREEN}✅ Backup completado en: $FULL_BACKUP_PATH${NC}"
     echo -e "${BLUE}📁 Visible desde Windows: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
@@ -105,7 +105,7 @@ function recreate_containers() {
 
 function restore() {
     echo -e "${CYAN}📂 Backups disponibles en: $BACKUP_DIR_PUBLIC${NC}"
-    mapfile -t backups < <(find "$BACKUP_DIR_PUBLIC" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort)
+    mapfile -t backups < <(find "$BACKUP_DIR_PUBLIC" -mindepth 1 -maxdepth 1 -type d -name "backup_*" -printf "%f\n" | sort)
 
     if [ ${#backups[@]} -eq 0 ]; then
         echo -e "${RED}❌ No hay backups disponibles.${NC}"
