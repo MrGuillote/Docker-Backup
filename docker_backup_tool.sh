@@ -105,7 +105,7 @@ function recreate_containers() {
 
 function restore() {
     echo -e "${CYAN}📂 Backups disponibles en: $BACKUP_DIR_PUBLIC${NC}"
-    mapfile -t backups < <(find "$BACKUP_DIR_PUBLIC" -mindepth 1 -maxdepth 1 -type d -name "backup_*" -printf "%f\n" | sort)
+    mapfile -t backups < <(find "$BACKUP_DIR_PUBLIC" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | sort)
 
     if [ ${#backups[@]} -eq 0 ]; then
         echo -e "${RED}❌ No hay backups disponibles.${NC}"
