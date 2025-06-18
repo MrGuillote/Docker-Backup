@@ -8,61 +8,37 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Función para convertir rutas de Windows a WSL
-function fix_windows_path() {
-    local input="$1"
-    input="${input//\\//}"
-    if [[ "$input" =~ ^[A-Za-z]: ]]; then
-        drive="${input:0:1}"
-        rest="${input:2}"
-        rest="${rest#/}"
-        input="/mnt/${drive,,}/$rest"
-    fi
-    echo "$input"
+# Configuración
+WSL_USER_HOME="/home/$(logname)"
+BACKUP_DIR_ROOT="/root/backups_docker"
+BACKUP_DIR_PUBLIC="$WSL_USER_HOME/backups_docker"
+DATE=$(date +"%Y%m%d_%H%M%S")
+BACKUP_NAME="backup_$DATE"
+FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
+LOG_FILE="$BACKUP_DIR_PUBLIC/last_backup.log"
+
+mkdir -p "$BACKUP_DIR_ROOT"
+mkdir -p "$BACKUP_DIR_PUBLIC"
+
+# Validar dependencias
+command -v docker &> /dev/null || { echo -e "${RED}❌ Docker no está instalado.${NC}"; exit 1; }
+
+# Banner
+function show_banner() {
+    echo -e "${BLUE}"
+    echo "██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗ "
+    echo "██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗"
+    echo "██████╔╝██║   ██║██║     █████╔╝ █████╗  ██████╔╝"
+    echo "██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔═══╝ "
+    echo "██║     ╚██████╔╝╚██████╗██║  ██╗███████╗██║     "
+    echo "╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     "
+    echo -e "${NC}"
 }
 
-# Confirmar ruta
-function confirm_path() {
-    local path="$1"
-    echo -e "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}\"$path\"${YELLOW} [s/N]: ${NC}"
-    read -r confirm
-    [[ "$confirm" =~ ^[Ss]$ ]] && return 0 || return 1
-}
-
-# Validar y confirmar una ruta
-function prompt_for_path() {
-    while true; do
-        echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
-        read -r raw_path
-        final_path=$(fix_windows_path "$raw_path")
-        echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}\"$final_path\"${NC}"
-        confirm_path "$final_path" && echo "$final_path" && return
-        echo -e "${RED}❌ Ruta cancelada. Intentá de nuevo.${NC}"
-    done
-}
-
-# Verificar Docker
-function check_docker() {
-    if ! command -v docker &>/dev/null; then
-        echo -e "${RED}❌ Docker no está instalado o no está en el PATH.${NC}"
-        return 1
-    fi
-    return 0
-}
-
-# Backup
 function backup() {
-    check_docker || return
-    BACKUP_DIR_PUBLIC=$(prompt_for_path)
-    BACKUP_DIR_ROOT="/root/backups_docker"
-    DATE=$(date +"%Y%m%d_%H%M%S")
-    BACKUP_NAME="backup_$DATE"
-    FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
-
-    mkdir -p "$BACKUP_DIR_ROOT" "$BACKUP_DIR_PUBLIC"
-
+    exec > >(tee -i "$LOG_FILE") 2>&1
     echo -e "${CYAN}📋 Guardando lista de imágenes...${NC}"
-    docker image ls --format '{{.Repository}}:{{.Tag}}' > "$FULL_BACKUP_PATH-images.txt"
+    docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v "<none>" > "$FULL_BACKUP_PATH-images.txt"
 
     echo -e "${CYAN}📦 Exportando imágenes Docker...${NC}"
     mkdir -p "$FULL_BACKUP_PATH/images"
@@ -80,34 +56,30 @@ function backup() {
     echo -e "${CYAN}🧱 Guardando contenedores activos...${NC}"
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
 
-    echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible...${NC}"
+    echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible desde Windows...${NC}"
     cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
 
     echo -e "${GREEN}✅ Backup completado en: $FULL_BACKUP_PATH${NC}"
-    echo -e "${BLUE}📁 Visible desde: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
+    echo -e "${BLUE}📁 Visible desde Windows: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
 }
 
-# Restaurar
 function restore() {
-    check_docker || return
-    echo -ne "${CYAN}📁 ¿Desde qué carpeta querés restaurar el backup?: ${NC}"
-    read -r raw_path
-    restore_path=$(fix_windows_path "$raw_path")
-    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}\"$restore_path\"${NC}"
+    echo -e "${CYAN}📂 Backups disponibles en: $BACKUP_DIR_PUBLIC${NC}"
+    mapfile -t backups < <(ls -1 "$BACKUP_DIR_PUBLIC")
 
-    mapfile -t backups < <(ls -1 "$restore_path")
     if [ ${#backups[@]} -eq 0 ]; then
         echo -e "${RED}❌ No hay backups disponibles.${NC}"
         return
     fi
 
-    echo -e "${YELLOW}Seleccione el backup a restaurar:${NC}"
+    echo -e "\n${YELLOW}Seleccione el backup a restaurar:${NC}"
     for i in "${!backups[@]}"; do
         echo -e "${BLUE}$((i+1))) ${backups[$i]}${NC}"
     done
 
     echo -ne "${CYAN}📝 Ingrese el número del backup: ${NC}"
-    read -r option
+    read option
+
     index=$((option-1))
     if [[ $index -lt 0 || $index -ge ${#backups[@]} ]]; then
         echo -e "${RED}❌ Opción inválida.${NC}"
@@ -115,11 +87,11 @@ function restore() {
     fi
 
     RESTORE_NAME="${backups[$index]}"
-    RESTORE_SRC="$restore_path/$RESTORE_NAME"
-    RESTORE_TMP="/root/backups_docker/$RESTORE_NAME"
+    RESTORE_SRC="$BACKUP_DIR_PUBLIC/$RESTORE_NAME"
+    RESTORE_TMP="$BACKUP_DIR_ROOT/$RESTORE_NAME"
 
-    echo -e "${YELLOW}📥 Copiando backup a /root...${NC}"
-    cp -r "$RESTORE_SRC" "/root/backups_docker"
+    echo -e "${YELLOW}📥 Copiando backup a $BACKUP_DIR_ROOT...${NC}"
+    cp -r "$RESTORE_SRC" "$BACKUP_DIR_ROOT"
 
     echo -e "${CYAN}📦 Restaurando imágenes...${NC}"
     for tarfile in "$RESTORE_TMP/images/"*.tar; do
@@ -127,53 +99,44 @@ function restore() {
     done
 
     echo -e "${CYAN}💾 Restaurando volúmenes...${NC}"
-    for archive in "$RESTORE_TMP/volumes/"*.tar.gz; do
-        name=$(basename "$archive" .tar.gz)
-        docker volume create "$name"
-        docker run --rm -v "$name":/volume -v "$RESTORE_TMP/volumes":/backup alpine \
-            sh -c "cd /volume && tar -xzf /backup/$name.tar.gz"
+    for volume_archive in "$RESTORE_TMP/volumes/"*.tar.gz; do
+        volume_name=$(basename "$volume_archive" .tar.gz)
+        docker volume create "$volume_name"
+        docker run --rm -v "$volume_name":/volume -v "$RESTORE_TMP/volumes":/backup alpine \
+            sh -c "cd /volume && tar -xzf /backup/$volume_name.tar.gz"
     done
 
-    echo -e "${YELLOW}🧹 Limpiando temporales...${NC}"
+    echo -e "${YELLOW}🧹 Limpiando archivos temporales...${NC}"
     rm -rf "$RESTORE_TMP"
+
     echo -e "${GREEN}✅ Restauración completada.${NC}"
 }
 
-# Montar volúmenes
-function mount_volumes() {
-    check_docker || return
-    echo -ne "${CYAN}🌐 Ruta donde montar los volúmenes: ${NC}"
-    read -r raw_path
-    mount_path=$(fix_windows_path "$raw_path")
-    mkdir -p "$mount_path"
-    echo -e "${CYAN}🔍 Montando volúmenes en: \"$mount_path\"${NC}"
-    for volume in $(docker volume ls -q); do
-        target="$mount_path/$volume"
-        mkdir -p "$target"
-        docker run --rm -v "$volume":/volume -v "$target":/copy alpine \
-            sh -c "cp -a /volume/. /copy/ 2>/dev/null || true"
-        chown -R $(whoami):$(whoami) "$target"
-    done
-    echo -e "${GREEN}✅ Montaje completado.${NC}"
-}
-
-# Menú
 function menu() {
     while true; do
-        echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ==== ${NC}"
+        show_banner
+        echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
         echo -e "${YELLOW}1)${NC} Hacer backup completo"
         echo -e "${YELLOW}2)${NC} Restaurar backup"
-        echo -e "${YELLOW}3)${NC} Montar volúmenes"
-        echo -e "${YELLOW}4)${NC} Salir"
+        echo -e "${YELLOW}3)${NC} Salir"
+        echo -e "${YELLOW}4)${NC} Eliminar este script y su carpeta"
         echo -e "${BLUE}============================${NC}"
-        echo -ne "${CYAN}Selecciona una opción [1-4]: ${NC}"
-        read -r opcion
-        case "$opcion" in
+        echo -ne "${CYAN}Selecciona una opción: ${NC}"
+        read opcion
+        case $opcion in
             1) backup ;;
             2) restore ;;
-            3) mount_volumes ;;
-            4) echo -e "${GREEN}👋 Saliendo...${NC}"; break ;;
-            *) echo -e "${RED}❌ Opción no válida. Por favor elegí 1, 2, 3 o 4.${NC}" ;;
+            3) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
+            4)
+                SCRIPT_PATH="$(realpath "$0")"
+                SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+                echo -e "${RED}🗑️ Eliminando $SCRIPT_DIR ...${NC}"
+                cd ~ || exit
+                rm -rf "$SCRIPT_DIR"
+                echo -e "${GREEN}✅ Eliminado.${NC}"
+                exit 0
+                ;;
+            *) echo -e "${RED}❌ Opción no válida${NC}" ;;
         esac
     done
 }
