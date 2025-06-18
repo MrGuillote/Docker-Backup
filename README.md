@@ -75,9 +75,9 @@ Abrí tu terminal de Ubuntu (WSL) y ejecutá este único comando:
 
 ## 🧠 ¿Qué te pide el script la primera vez?
 
-1. 👤 **Usuario de Ubuntu** (ej: `guquintana`)
-2. 📁 **Carpeta donde guardar/restaurar backups** (sugerido: `/home/guquintana/backups_docker`)
-3. 🌐 **Carpeta donde montar volúmenes** (sugerido: `/home/guquintana/www-docker`)
+1. 👤 **Usuario de Ubuntu** (ej: `mrguillote`)
+2. 📁 **Carpeta donde guardar/restaurar backups** (sugerido: `/home/mrguillote/backups_docker`)
+3. 🌐 **Carpeta donde montar volúmenes** (sugerido: `/home/mrguillote/www-docker`)
 
 🔐 La configuración queda guardada en `.docker_backup_config` y podés reiniciarla desde el menú.
 
@@ -123,7 +123,7 @@ El script:
 Los volúmenes son copiados a `/home/<usuario>/www-docker`, accesibles desde:
 
 ```
-\\wsl.localhost\Ubuntu\home\guquintana\www-docker
+\\wsl.localhost\Ubuntu\home\mrguillote\www-docker
 ```
 
 > Así podés ver archivos de WordPress u otros volúmenes como si fueran carpetas locales.
