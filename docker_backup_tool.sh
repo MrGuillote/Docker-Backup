@@ -8,96 +8,44 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Configuración de backup interno
-BACKUP_DIR_ROOT="/root/backups_docker"
-DATE=$(date +"%Y%m%d_%H%M%S")
-BACKUP_NAME="backup_$DATE"
-
-# Verificar y/o instalar zenity si se desea soporte gráfico
-function ensure_zenity_installed() {
-    if ! command -v zenity &> /dev/null; then
-        echo -e "${YELLOW}🔍 Zenity no está instalado. Instalando...${NC}"
-        sudo apt update && sudo apt install -y zenity
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✅ Zenity instalado correctamente.${NC}"
-        else
-            echo -e "${RED}❌ Error al instalar zenity.${NC}"
-        fi
-    fi
-}
-
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
-    local path="$1"
-    path="${path//'\\'/'/'}"  # Reemplaza \ por /
-    if [[ "$path" =~ ^[A-Za-z]: ]]; then
-        local drive_letter="${path:0:1}"
-        local rest="${path:2}"
-        rest="${rest#/}"  # Quita el primer /
-        rest="${rest//\//}"  # Quita todas las barras adicionales
-        path="/mnt/${drive_letter,,}/$rest"
+    local input="$1"
+    input="${input//\\//}"
+    if [[ "$input" =~ ^[A-Za-z]: ]]; then
+        drive="${input:0:1}"
+        rest="${input:2}"
+        input="/mnt/${drive,,}/${rest#/}"
     fi
-    echo "$path"
+    echo "$input"
 }
 
+# Confirmar ruta
 function confirm_path() {
-    local final_path="$1"
-    echo -ne "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}$final_path${YELLOW} [s/N]: ${NC}"
+    local path="$1"
+    echo -e "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}$path${YELLOW} [s/N]: ${NC}"
     read confirm
-    if [[ "$confirm" =~ ^[Ss]$ ]]; then
-        return 0
-    else
-        return 1
-    fi
+    [[ "$confirm" =~ ^[Ss]$ ]] && return 0 || return 1
 }
 
+# Backup
 function backup() {
-    echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (Dejá vacío para abrir una ventana): ${NC}"
-    read dest_dir_raw
+    while true; do
+        echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
+        read raw_path
+        final_path=$(fix_windows_path "$raw_path")
+        echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$final_path${NC}"
+        confirm_path "$final_path" && break
+        echo -e "${RED}❌ Ruta cancelada. Intentá de nuevo.${NC}"
+    done
 
-    if [[ -z "$dest_dir_raw" ]]; then
-        dest_dir_raw=$(zenity --file-selection --directory --title="Seleccioná una carpeta para guardar el backup")
-        if [[ -z "$dest_dir_raw" ]]; then
-            echo -e "${RED}❌ No se seleccionó ninguna carpeta. Cancelando...${NC}"
-            return
-        fi
-    fi
-
-    dest_dir=$(fix_windows_path "$dest_dir_raw")
-    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
-
-    if ! confirm_path "$dest_dir"; then
-        echo -ne "${CYAN}📁 ¿Querés seleccionar una nueva carpeta desde una ventana? [s/N]: ${NC}"
-        read retry_gui
-        if [[ "$retry_gui" =~ ^[Ss]$ ]]; then
-            dest_dir_raw=$(zenity --file-selection --directory --title="Seleccioná una nueva carpeta")
-            if [[ -z "$dest_dir_raw" ]]; then
-                echo -e "${RED}❌ No se seleccionó ninguna carpeta. Cancelando...${NC}"
-                return
-            fi
-            dest_dir=$(fix_windows_path "$dest_dir_raw")
-            echo -e "${YELLOW}📂 Nueva ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
-            if ! confirm_path "$dest_dir"; then
-                echo -e "${RED}❌ Backup cancelado por el usuario.${NC}"
-                return
-            fi
-        else
-            echo -e "${RED}❌ Backup cancelado por el usuario.${NC}"
-            return
-        fi
-    fi
-
-    if [ ! -d "$dest_dir" ]; then
-        echo -e "${YELLOW}📂 La ruta no existe. Creando: $dest_dir${NC}"
-        mkdir -p "$dest_dir"
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}❌ Error al crear el directorio de destino${NC}"
-            return
-        fi
-    fi
-
-    mkdir -p "$BACKUP_DIR_ROOT"
+    BACKUP_DIR_ROOT="/root/backups_docker"
+    BACKUP_DIR_PUBLIC="$final_path"
+    DATE=$(date +"%Y%m%d_%H%M%S")
+    BACKUP_NAME="backup_$DATE"
     FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
+
+    mkdir -p "$BACKUP_DIR_ROOT" "$BACKUP_DIR_PUBLIC"
 
     echo -e "${CYAN}📋 Guardando lista de imágenes...${NC}"
     docker image ls --format '{{.Repository}}:{{.Tag}}' > "$FULL_BACKUP_PATH-images.txt"
@@ -119,15 +67,83 @@ function backup() {
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
 
     echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible...${NC}"
-    cp -r "$FULL_BACKUP_PATH" "$dest_dir"
+    cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
 
     echo -e "${GREEN}✅ Backup completado en: $FULL_BACKUP_PATH${NC}"
-    echo -e "${BLUE}📁 Visible desde: $dest_dir/$BACKUP_NAME${NC}"
+    echo -e "${BLUE}📁 Visible desde: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
 }
 
+# Restaurar
+function restore() {
+    echo -ne "${CYAN}📁 ¿Desde qué carpeta querés restaurar el backup?: ${NC}"
+    read raw_path
+    restore_path=$(fix_windows_path "$raw_path")
+    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$restore_path${NC}"
+
+    mapfile -t backups < <(ls -1 "$restore_path")
+    if [ ${#backups[@]} -eq 0 ]; then
+        echo -e "${RED}❌ No hay backups disponibles.${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}Seleccione el backup a restaurar:${NC}"
+    for i in "${!backups[@]}"; do
+        echo -e "${BLUE}$((i+1))) ${backups[$i]}${NC}"
+    done
+
+    echo -ne "${CYAN}📝 Ingrese el número del backup: ${NC}"
+    read option
+    index=$((option-1))
+    if [[ $index -lt 0 || $index -ge ${#backups[@]} ]]; then
+        echo -e "${RED}❌ Opción inválida.${NC}"
+        return
+    fi
+
+    RESTORE_NAME="${backups[$index]}"
+    RESTORE_SRC="$restore_path/$RESTORE_NAME"
+    RESTORE_TMP="/root/backups_docker/$RESTORE_NAME"
+
+    echo -e "${YELLOW}📥 Copiando backup a /root...${NC}"
+    cp -r "$RESTORE_SRC" "/root/backups_docker"
+
+    echo -e "${CYAN}📦 Restaurando imágenes...${NC}"
+    for tarfile in "$RESTORE_TMP/images/"*.tar; do
+        docker load -i "$tarfile"
+    done
+
+    echo -e "${CYAN}💾 Restaurando volúmenes...${NC}"
+    for archive in "$RESTORE_TMP/volumes/"*.tar.gz; do
+        name=$(basename "$archive" .tar.gz)
+        docker volume create "$name"
+        docker run --rm -v "$name":/volume -v "$RESTORE_TMP/volumes":/backup alpine \
+            sh -c "cd /volume && tar -xzf /backup/$name.tar.gz"
+    done
+
+    echo -e "${YELLOW}🧹 Limpiando temporales...${NC}"
+    rm -rf "$RESTORE_TMP"
+    echo -e "${GREEN}✅ Restauración completada.${NC}"
+}
+
+# Montar volúmenes
+function mount_volumes() {
+    echo -ne "${CYAN}🌐 Ruta donde montar los volúmenes: ${NC}"
+    read raw_path
+    mount_path=$(fix_windows_path "$raw_path")
+    mkdir -p "$mount_path"
+    echo -e "${CYAN}🔍 Montando volúmenes en: $mount_path${NC}"
+    for volume in $(docker volume ls -q); do
+        target="$mount_path/$volume"
+        mkdir -p "$target"
+        docker run --rm -v "$volume":/volume -v "$target":/copy alpine \
+            sh -c "cp -a /volume/. /copy/ 2>/dev/null || true"
+        chown -R $(whoami):$(whoami) "$target"
+    done
+    echo -e "${GREEN}✅ Montaje completado.${NC}"
+}
+
+# Menú
 function menu() {
-    ensure_zenity_installed
-    echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
+    echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ==== ${NC}"
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
     echo -e "${YELLOW}3)${NC} Montar volúmenes"
@@ -137,8 +153,8 @@ function menu() {
     read opcion
     case $opcion in
         1) backup ;;
-        2) echo -e "${RED}⚠️ Restauración aún no implementada aquí${NC}" ;;
-        3) echo -e "${RED}⚠️ Montaje aún no implementado aquí${NC}" ;;
+        2) restore ;;
+        3) mount_volumes ;;
         4) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
     esac
