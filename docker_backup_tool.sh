@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local input="$1"
-    input="${input//\\/\/}"
+    input="${input//\\//}"
     if [[ "$input" =~ ^[A-Za-z]: ]]; then
         drive="${input:0:1}"
         rest="${input:2}"
@@ -24,8 +24,8 @@ function fix_windows_path() {
 # Confirmar ruta
 function confirm_path() {
     local path="$1"
-    echo -e "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}$path${YELLOW} [s/N]: ${NC}"
-    read confirm
+    echo -e "${YELLOW}📂 ¿Usamos esta ruta? ${BLUE}\"$path\"${YELLOW} [s/N]: ${NC}"
+    read -r confirm
     [[ "$confirm" =~ ^[Ss]$ ]] && return 0 || return 1
 }
 
@@ -33,16 +33,26 @@ function confirm_path() {
 function prompt_for_path() {
     while true; do
         echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
-        read raw_path
+        read -r raw_path
         final_path=$(fix_windows_path "$raw_path")
-        echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$final_path${NC}"
+        echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}\"$final_path\"${NC}"
         confirm_path "$final_path" && echo "$final_path" && return
         echo -e "${RED}❌ Ruta cancelada. Intentá de nuevo.${NC}"
     done
 }
 
+# Verificar Docker
+function check_docker() {
+    if ! command -v docker &>/dev/null; then
+        echo -e "${RED}❌ Docker no está instalado o no está en el PATH.${NC}"
+        return 1
+    fi
+    return 0
+}
+
 # Backup
 function backup() {
+    check_docker || return
     BACKUP_DIR_PUBLIC=$(prompt_for_path)
     BACKUP_DIR_ROOT="/root/backups_docker"
     DATE=$(date +"%Y%m%d_%H%M%S")
@@ -79,10 +89,11 @@ function backup() {
 
 # Restaurar
 function restore() {
+    check_docker || return
     echo -ne "${CYAN}📁 ¿Desde qué carpeta querés restaurar el backup?: ${NC}"
-    read raw_path
+    read -r raw_path
     restore_path=$(fix_windows_path "$raw_path")
-    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$restore_path${NC}"
+    echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}\"$restore_path\"${NC}"
 
     mapfile -t backups < <(ls -1 "$restore_path")
     if [ ${#backups[@]} -eq 0 ]; then
@@ -96,7 +107,7 @@ function restore() {
     done
 
     echo -ne "${CYAN}📝 Ingrese el número del backup: ${NC}"
-    read option
+    read -r option
     index=$((option-1))
     if [[ $index -lt 0 || $index -ge ${#backups[@]} ]]; then
         echo -e "${RED}❌ Opción inválida.${NC}"
@@ -130,11 +141,12 @@ function restore() {
 
 # Montar volúmenes
 function mount_volumes() {
+    check_docker || return
     echo -ne "${CYAN}🌐 Ruta donde montar los volúmenes: ${NC}"
-    read raw_path
+    read -r raw_path
     mount_path=$(fix_windows_path "$raw_path")
     mkdir -p "$mount_path"
-    echo -e "${CYAN}🔍 Montando volúmenes en: $mount_path${NC}"
+    echo -e "${CYAN}🔍 Montando volúmenes en: \"$mount_path\"${NC}"
     for volume in $(docker volume ls -q); do
         target="$mount_path/$volume"
         mkdir -p "$target"
@@ -144,7 +156,8 @@ function mount_volumes() {
     done
     echo -e "${GREEN}✅ Montaje completado.${NC}"
 }
-#menu
+
+# Menú
 function menu() {
     while true; do
         echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ==== ${NC}"
@@ -165,3 +178,4 @@ function menu() {
     done
 }
 
+menu
