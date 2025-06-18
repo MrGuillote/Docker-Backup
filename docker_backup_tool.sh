@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# Config file path
-CONFIG_FILE="/home/$USER/.docker_backup_config"
-
-# Colors
+# Colores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -11,30 +8,26 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Load config if exists
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo -e "${CYAN}🛠 Configuración inicial${NC}"
-    read -p "👤 Usuario Linux (ej. mrguillote): " DOCKER_USER
-    read -p "📁 Ruta para guardar/restaurar backups (ej. /home/$DOCKER_USER/backups_docker): " BACKUP_DIR_PUBLIC
-    read -p "🌐 Carpeta para montar volúmenes (ej. /home/$DOCKER_USER/www-docker): " MOUNT_DIR
+# Función para limpiar texto
+function clean_path() {
+    local input="$1"
+    # Convierte "C:\\Users" en "/mnt/c/Users"
+    echo "$input" | sed 's#\\\\#/#g' | sed 's#\\#/#g' | sed -E 's#^([A-Za-z]):#/mnt/\L\1#'
+}
 
-    echo "DOCKER_USER=$DOCKER_USER" > "$CONFIG_FILE"
-    echo "BACKUP_DIR_PUBLIC=$BACKUP_DIR_PUBLIC" >> "$CONFIG_FILE"
-    echo "MOUNT_DIR=$MOUNT_DIR" >> "$CONFIG_FILE"
-fi
-
-# Constantes
-BACKUP_DIR_ROOT="/root/backups_docker"
-DATE=$(date +"%Y%m%d_%H%M%S")
-BACKUP_NAME="backup_$DATE"
-FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
-
-mkdir -p "$BACKUP_DIR_ROOT"
-mkdir -p "$BACKUP_DIR_PUBLIC"
-
+# Función para hacer el backup
 function backup() {
+    echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\tuusuario\\Downloads): ${NC}"
+    read BACKUP_DIR_RAW
+    BACKUP_DIR_PUBLIC=$(clean_path "$BACKUP_DIR_RAW")
+    BACKUP_DIR_ROOT="/root/backups_docker"
+    DATE=$(date +"%Y%m%d_%H%M%S")
+    BACKUP_NAME="backup_$DATE"
+    FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
+
+    mkdir -p "$BACKUP_DIR_ROOT"
+    mkdir -p "$BACKUP_DIR_PUBLIC"
+
     echo -e "${CYAN}📋 Guardando lista de imágenes...${NC}"
     docker image ls --format '{{.Repository}}:{{.Tag}}' > "$FULL_BACKUP_PATH-images.txt"
 
@@ -61,9 +54,14 @@ function backup() {
     echo -e "${BLUE}📁 Visible desde: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
 }
 
+# Función para restaurar backup
 function restore() {
-    echo -e "${CYAN}📂 Backups disponibles en: $BACKUP_DIR_PUBLIC${NC}"
-    mapfile -t backups < <(ls -1 "$BACKUP_DIR_PUBLIC")
+    echo -ne "${CYAN}📁 ¿Desde qué carpeta querés restaurar el backup?: ${NC}"
+    read BACKUP_RESTORE_RAW
+    BACKUP_RESTORE=$(clean_path "$BACKUP_RESTORE_RAW")
+
+    echo -e "${CYAN}📂 Backups disponibles en: $BACKUP_RESTORE${NC}"
+    mapfile -t backups < <(ls -1 "$BACKUP_RESTORE")
 
     if [ ${#backups[@]} -eq 0 ]; then
         echo -e "${RED}❌ No hay backups disponibles.${NC}"
@@ -85,11 +83,11 @@ function restore() {
     fi
 
     RESTORE_NAME="${backups[$index]}"
-    RESTORE_SRC="$BACKUP_DIR_PUBLIC/$RESTORE_NAME"
-    RESTORE_TMP="$BACKUP_DIR_ROOT/$RESTORE_NAME"
+    RESTORE_SRC="$BACKUP_RESTORE/$RESTORE_NAME"
+    RESTORE_TMP="/root/backups_docker/$RESTORE_NAME"
 
-    echo -e "${YELLOW}📥 Copiando backup a $BACKUP_DIR_ROOT...${NC}"
-    cp -r "$RESTORE_SRC" "$BACKUP_DIR_ROOT"
+    echo -e "${YELLOW}📥 Copiando backup a /root...${NC}"
+    cp -r "$RESTORE_SRC" "/root/backups_docker"
 
     echo -e "${CYAN}📦 Restaurando imágenes...${NC}"
     for tarfile in "$RESTORE_TMP/images/"*.tar; do
@@ -104,46 +102,37 @@ function restore() {
             sh -c "cd /volume && tar -xzf /backup/$volume_name.tar.gz"
     done
 
-    echo -e "${YELLOW}🧹 Limpiando archivos temporales...${NC}"
+    echo -e "${YELLOW}🧹 Limpiando temporales...${NC}"
     rm -rf "$RESTORE_TMP"
-
     echo -e "${GREEN}✅ Restauración completada.${NC}"
 }
 
+# Función para montar volúmenes
 function mount_volumes() {
-    echo -e "${CYAN}📂 Montando todos los volúmenes en: $MOUNT_DIR ${NC}"
+    echo -ne "${CYAN}🌐 Ruta donde montar los volúmenes (ej. /home/tuusuario/www-docker): ${NC}"
+    read MOUNT_RAW
+    MOUNT_DIR=$(clean_path "$MOUNT_RAW")
     mkdir -p "$MOUNT_DIR"
+
+    echo -e "${CYAN}🔍 Montando volúmenes Docker en: $MOUNT_DIR ${NC}"
     for volume in $(docker volume ls -q); do
         TARGET="$MOUNT_DIR/$volume"
-        echo "📦 $volume -> $TARGET"
         mkdir -p "$TARGET"
         docker run --rm -v "$volume":/volume -v "$TARGET":/copy alpine \
             sh -c "cp -a /volume/. /copy/ 2>/dev/null || true"
-        chown -R "$DOCKER_USER":"$DOCKER_USER" "$TARGET"
+        chown -R $(whoami):$(whoami) "$TARGET"
     done
-    echo -e "${GREEN}✅ Todos los volúmenes fueron montados en: $MOUNT_DIR${NC}"
-    echo -e "💡 Accesible desde Windows: \\wsl.localhost\\Ubuntu\\${MOUNT_DIR#/home/}" 
+
+    echo -e "${GREEN}✅ Todos los volúmenes han sido montados en: $MOUNT_DIR${NC}"
 }
 
-function reset_config() {
-    echo -e "${RED}⚠ Esto eliminará la configuración actual. ¿Continuar? (s/n)${NC}"
-    read confirm
-    if [[ "$confirm" == "s" ]]; then
-        rm -f "$CONFIG_FILE"
-        echo -e "${GREEN}✔ Configuración eliminada. Reinicie el script.${NC}"
-        exit 0
-    else
-        echo -e "${YELLOW}🚫 Cancelado.${NC}"
-    fi
-}
-
+# Menú
 function menu() {
     echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
-    echo -e "${YELLOW}3)${NC} Montar volúmenes en $MOUNT_DIR"
-    echo -e "${YELLOW}4)${NC} Resetear configuración Solo si cargaste mal las variables/rutas"
-    echo -e "${YELLOW}5)${NC} Salir"
+    echo -e "${YELLOW}3)${NC} Montar volúmenes"
+    echo -e "${YELLOW}4)${NC} Salir"
     echo -e "${BLUE}============================${NC}"
     echo -ne "${CYAN}Selecciona una opción: ${NC}"
     read opcion
@@ -151,8 +140,7 @@ function menu() {
         1) backup ;;
         2) restore ;;
         3) mount_volumes ;;
-        4) reset_config ;;
-        5) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
+        4) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
     esac
 }
