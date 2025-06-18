@@ -29,7 +29,7 @@ function backup() {
         docker save "$image" -o "$FULL_BACKUP_PATH/images/$(echo $image | tr '/:' '_').tar"
     done < "$FULL_BACKUP_PATH-images.txt"
 
-    echo -e "${CYAN}💾 Exportando volúmenes...${NC}"
+    echo -e "${CYAN}📎 Exportando volúmenes...${NC}"
     mkdir -p "$FULL_BACKUP_PATH/volumes"
     for volume in $(docker volume ls -q); do
         docker run --rm -v "$volume":/volume -v "$FULL_BACKUP_PATH/volumes":/backup alpine \
@@ -38,6 +38,9 @@ function backup() {
 
     echo -e "${CYAN}🧱 Guardando contenedores activos...${NC}"
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
+    for container in $(docker ps -a --format '{{.Names}}'); do
+        docker inspect "$container" > "$FULL_BACKUP_PATH/${container}_inspect.json"
+    done
 
     echo -e "${YELLOW}🔐 Ajustando permisos...${NC}"
     chown -R guquintana:guquintana "$FULL_BACKUP_PATH"
@@ -79,7 +82,7 @@ function restore() {
     RESTORE_SRC="$BACKUP_DIR_PUBLIC/$RESTORE_NAME"
     RESTORE_TMP="$BACKUP_DIR_ROOT/$RESTORE_NAME"
 
-    echo -e "${YELLOW}📥 Copiando backup a $BACKUP_DIR_ROOT...${NC}"
+    echo -e "${YELLOW}👥 Copiando backup a $BACKUP_DIR_ROOT...${NC}"
     cp -r "$RESTORE_SRC" "$BACKUP_DIR_ROOT"
 
     echo -e "${CYAN}📦 Restaurando imágenes...${NC}"
@@ -87,7 +90,7 @@ function restore() {
         docker load -i "$tarfile"
     done
 
-    echo -e "${CYAN}💾 Restaurando volúmenes...${NC}"
+    echo -e "${CYAN}📎 Restaurando volúmenes...${NC}"
     for volume_archive in "$RESTORE_TMP/volumes/"*.tar.gz; do
         volume_name=$(basename "$volume_archive" .tar.gz)
         docker volume create "$volume_name"
@@ -95,7 +98,35 @@ function restore() {
             sh -c "cd /volume && tar -xzf /backup/$volume_name.tar.gz"
     done
 
-    echo -e "${YELLOW}🧹 Limpiando archivos temporales...${NC}"
+    echo -e "${CYAN}🚀 Recreando contenedores...${NC}"
+    for inspect_file in "$RESTORE_TMP"/*_inspect.json; do
+        container_name=$(basename "$inspect_file" _inspect.json)
+        if docker ps -a --format '{{.Names}}' | grep -q "^$container_name$"; then
+            echo -e "${YELLOW}⚠️ Contenedor '$container_name' ya existe. Omitiendo...${NC}"
+            continue
+        fi
+        config=$(cat "$inspect_file")
+        image=$(echo "$config" | jq -r '.[0].Config.Image')
+        cmd=$(echo "$config" | jq -r '.[0].Config.Cmd | join(" ")')
+        ports=$(echo "$config" | jq -r '.[0].HostConfig.PortBindings | to_entries[] | "-p "+.value[0].HostPort+":"+.key' 2>/dev/null)
+        mounts=$(echo "$config" | jq -r '.[0].Mounts[] | "-v "+.Source+":"+.Destination' 2>/dev/null)
+        networks=$(echo "$config" | jq -r '.[0].NetworkSettings.Networks | keys[]' 2>/dev/null)
+
+        network_arg=""
+        for net in $networks; do
+            docker network inspect "$net" >/dev/null 2>&1 || docker network create "$net"
+            network_arg+=" --network $net"
+        done
+
+        docker run -d --name "$container_name" $ports $mounts $network_arg "$image" $cmd
+    done
+
+    echo -e "${CYAN}🔄 Reiniciando contenedores detenidos...${NC}"
+    for name in $(jq -r '.[0].Name' "$RESTORE_TMP"/*_inspect.json | sed 's#^/##'); do
+        docker start "$name" >/dev/null 2>&1 && echo -e "${GREEN}▶️ Contenedor '$name' iniciado.${NC}"
+    done
+
+    echo -e "${YELLOW}🛩️ Limpiando archivos temporales...${NC}"
     rm -rf "$RESTORE_TMP"
 
     echo -e "${GREEN}✅ Restauración completada.${NC}"
