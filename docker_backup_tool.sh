@@ -34,8 +34,8 @@ function fix_windows_path() {
         local drive_letter="${path:0:1}"
         local rest="${path:2}"
         rest="${rest#/}"  # Quita el primer /
+        rest="${rest//\//}"  # Quita todas las barras adicionales
         path="/mnt/${drive_letter,,}/$rest"
-        path="${path//\\/}" # Elimina barras invertidas
     fi
     echo "$path"
 }
