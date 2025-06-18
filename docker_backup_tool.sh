@@ -74,4 +74,33 @@ function backup() {
     echo -e "${BLUE}📁 Visible desde Windows: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
 }
 
-# ... el resto del script permanece igual ...
+function recreate_containers() {
+    echo -e "${CYAN}🚀 Recreando contenedores...${NC}"
+    for inspect_file in "$RESTORE_TMP"/*_inspect.json; do
+        container_name=$(basename "$inspect_file" _inspect.json)
+        image=$(jq -r '.[0].Config.Image' "$inspect_file")
+
+        cmd="docker run -d --name $container_name"
+
+        ports=$(jq -r '.[0].HostConfig.PortBindings // {} | to_entries[] | "-p \(.value[0].HostPort):\(.key | split("/")[0])"' "$inspect_file")
+        for port in $ports; do
+            cmd+=" $port"
+        done
+
+        envs=$(jq -r '.[0].Config.Env[]?' "$inspect_file")
+        for env in $envs; do
+            cmd+=" -e \"$env\""
+        done
+
+        volumes=$(jq -r '.[0].Mounts[]? | "-v \(.Name):\(.Destination)"' "$inspect_file")
+        for vol in $volumes; do
+            cmd+=" $vol"
+        done
+
+        cmd+=" $image"
+        echo "Ejecutando: $cmd"
+        eval $cmd
+    done
+}
+
+# (Aquí iría el resto del script que ya tienes, como restore, montar_backup_dir, montar_volumenes, menu, etc.)
