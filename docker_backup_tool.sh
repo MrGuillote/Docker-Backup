@@ -77,6 +77,7 @@ function backup() {
 function recreate_containers() {
     echo -e "${CYAN}🚀 Recreando contenedores...${NC}"
     for inspect_file in "$RESTORE_TMP"/*_inspect.json; do
+        [ -f "$inspect_file" ] || continue
         container_name=$(basename "$inspect_file" _inspect.json)
         image=$(jq -r '.[0].Config.Image' "$inspect_file")
 
