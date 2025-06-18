@@ -144,24 +144,24 @@ function mount_volumes() {
     done
     echo -e "${GREEN}✅ Montaje completado.${NC}"
 }
-
-# Menú
+#menu
 function menu() {
-    echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ==== ${NC}"
-    echo -e "${YELLOW}1)${NC} Hacer backup completo"
-    echo -e "${YELLOW}2)${NC} Restaurar backup"
-    echo -e "${YELLOW}3)${NC} Montar volúmenes"
-    echo -e "${YELLOW}4)${NC} Salir"
-    echo -e "${BLUE}============================${NC}"
-    echo -ne "${CYAN}Selecciona una opción: ${NC}"
-    read opcion
-    case $opcion in
-        1) backup ;;
-        2) restore ;;
-        3) mount_volumes ;;
-        4) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
-        *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
-    esac
+    while true; do
+        echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ==== ${NC}"
+        echo -e "${YELLOW}1)${NC} Hacer backup completo"
+        echo -e "${YELLOW}2)${NC} Restaurar backup"
+        echo -e "${YELLOW}3)${NC} Montar volúmenes"
+        echo -e "${YELLOW}4)${NC} Salir"
+        echo -e "${BLUE}============================${NC}"
+        echo -ne "${CYAN}Selecciona una opción [1-4]: ${NC}"
+        read -r opcion
+        case "$opcion" in
+            1) backup ;;
+            2) restore ;;
+            3) mount_volumes ;;
+            4) echo -e "${GREEN}👋 Saliendo...${NC}"; break ;;
+            *) echo -e "${RED}❌ Opción no válida. Por favor elegí 1, 2, 3 o 4.${NC}" ;;
+        esac
+    done
 }
 
-menu
