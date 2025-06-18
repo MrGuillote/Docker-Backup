@@ -1,6 +1,9 @@
 #!/bin/bash
 
-# Colores
+# Config file path
+CONFIG_FILE="/home/$USER/.docker_backup_config"
+
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -8,9 +11,22 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Configuración
+# Load config if exists
+if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
+else
+    echo -e "${CYAN}🛠 Configuración inicial${NC}"
+    read -p "👤 Usuario Linux (ej. guquintana): " DOCKER_USER
+    read -p "📁 Ruta para guardar/restaurar backups (ej. /home/$DOCKER_USER/backups_docker): " BACKUP_DIR_PUBLIC
+    read -p "🌐 Carpeta para montar volúmenes (ej. /home/$DOCKER_USER/www-docker): " MOUNT_DIR
+
+    echo "DOCKER_USER=$DOCKER_USER" > "$CONFIG_FILE"
+    echo "BACKUP_DIR_PUBLIC=$BACKUP_DIR_PUBLIC" >> "$CONFIG_FILE"
+    echo "MOUNT_DIR=$MOUNT_DIR" >> "$CONFIG_FILE"
+fi
+
+# Constantes
 BACKUP_DIR_ROOT="/root/backups_docker"
-BACKUP_DIR_PUBLIC="/home/guquintana/backups_docker"
 DATE=$(date +"%Y%m%d_%H%M%S")
 BACKUP_NAME="backup_$DATE"
 FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
@@ -38,11 +54,11 @@ function backup() {
     echo -e "${CYAN}🧱 Guardando contenedores activos...${NC}"
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
 
-    echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible desde Windows...${NC}"
+    echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible...${NC}"
     cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
 
     echo -e "${GREEN}✅ Backup completado en: $FULL_BACKUP_PATH${NC}"
-    echo -e "${BLUE}📁 Visible desde Windows: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
+    echo -e "${BLUE}📁 Visible desde: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
 }
 
 function restore() {
@@ -54,7 +70,6 @@ function restore() {
         return
     fi
 
-    echo ""
     echo -e "${YELLOW}Seleccione el backup a restaurar:${NC}"
     for i in "${!backups[@]}"; do
         echo -e "${BLUE}$((i+1))) ${backups[$i]}${NC}"
@@ -95,28 +110,49 @@ function restore() {
     echo -e "${GREEN}✅ Restauración completada.${NC}"
 }
 
+function mount_volumes() {
+    echo -e "${CYAN}📂 Montando todos los volúmenes en: $MOUNT_DIR ${NC}"
+    mkdir -p "$MOUNT_DIR"
+    for volume in $(docker volume ls -q); do
+        TARGET="$MOUNT_DIR/$volume"
+        echo "📦 $volume -> $TARGET"
+        mkdir -p "$TARGET"
+        docker run --rm -v "$volume":/volume -v "$TARGET":/copy alpine \
+            sh -c "cp -a /volume/. /copy/ 2>/dev/null || true"
+        chown -R "$DOCKER_USER":"$DOCKER_USER" "$TARGET"
+    done
+    echo -e "${GREEN}✅ Todos los volúmenes fueron montados en: $MOUNT_DIR${NC}"
+    echo -e "💡 Accesible desde Windows: \\wsl.localhost\\Ubuntu\\${MOUNT_DIR#/home/}" 
+}
+
+function reset_config() {
+    echo -e "${RED}⚠ Esto eliminará la configuración actual. ¿Continuar? (s/n)${NC}"
+    read confirm
+    if [[ "$confirm" == "s" ]]; then
+        rm -f "$CONFIG_FILE"
+        echo -e "${GREEN}✔ Configuración eliminada. Reinicie el script.${NC}"
+        exit 0
+    else
+        echo -e "${YELLOW}🚫 Cancelado.${NC}"
+    fi
+}
+
 function menu() {
     echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
-    echo -e "${YELLOW}3)${NC} Salir"
-    echo -e "${YELLOW}4)${NC} Eliminar este script y su carpeta"
+    echo -e "${YELLOW}3)${NC} Montar volúmenes en $MOUNT_DIR"
+    echo -e "${YELLOW}4)${NC} Resetear configuración"
+    echo -e "${YELLOW}5)${NC} Salir"
     echo -e "${BLUE}============================${NC}"
     echo -ne "${CYAN}Selecciona una opción: ${NC}"
     read opcion
     case $opcion in
         1) backup ;;
         2) restore ;;
-        3) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
-        4)
-            SCRIPT_PATH="$(realpath "$0")"
-            SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-            echo -e "${RED}🗑️ Eliminando $SCRIPT_DIR ...${NC}"
-            cd ~ || exit
-            rm -rf "$SCRIPT_DIR"
-            echo -e "${GREEN}✅ Eliminado.${NC}"
-            exit 0
-            ;;
+        3) mount_volumes ;;
+        4) reset_config ;;
+        5) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
         *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
     esac
 }
