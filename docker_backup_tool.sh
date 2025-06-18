@@ -33,9 +33,9 @@ function fix_windows_path() {
     if [[ "$path" =~ ^[A-Za-z]: ]]; then
         local drive_letter="${path:0:1}"
         local rest="${path:2}"
-        path="/mnt/${drive_letter,,}/${rest}"
-        path="${path// /}" # Elimina espacios
-        path="${path//\"}" # Elimina comillas
+        rest="${rest#/}"  # Quita el primer /
+        path="/mnt/${drive_letter,,}/$rest"
+        path="${path//\\/}" # Elimina barras invertidas
     fi
     echo "$path"
 }
@@ -47,19 +47,44 @@ function confirm_path() {
     if [[ "$confirm" =~ ^[Ss]$ ]]; then
         return 0
     else
-        echo -e "${RED}🚫 Ruta cancelada por el usuario.${NC}"
         return 1
     fi
 }
 
 function backup() {
-    echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
+    echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (Dejá vacío para abrir una ventana): ${NC}"
     read dest_dir_raw
+
+    if [[ -z "$dest_dir_raw" ]]; then
+        dest_dir_raw=$(zenity --file-selection --directory --title="Seleccioná una carpeta para guardar el backup")
+        if [[ -z "$dest_dir_raw" ]]; then
+            echo -e "${RED}❌ No se seleccionó ninguna carpeta. Cancelando...${NC}"
+            return
+        fi
+    fi
+
     dest_dir=$(fix_windows_path "$dest_dir_raw")
     echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
 
     if ! confirm_path "$dest_dir"; then
-        return
+        echo -ne "${CYAN}📁 ¿Querés seleccionar una nueva carpeta desde una ventana? [s/N]: ${NC}"
+        read retry_gui
+        if [[ "$retry_gui" =~ ^[Ss]$ ]]; then
+            dest_dir_raw=$(zenity --file-selection --directory --title="Seleccioná una nueva carpeta")
+            if [[ -z "$dest_dir_raw" ]]; then
+                echo -e "${RED}❌ No se seleccionó ninguna carpeta. Cancelando...${NC}"
+                return
+            fi
+            dest_dir=$(fix_windows_path "$dest_dir_raw")
+            echo -e "${YELLOW}📂 Nueva ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
+            if ! confirm_path "$dest_dir"; then
+                echo -e "${RED}❌ Backup cancelado por el usuario.${NC}"
+                return
+            fi
+        else
+            echo -e "${RED}❌ Backup cancelado por el usuario.${NC}"
+            return
+        fi
     fi
 
     if [ ! -d "$dest_dir" ]; then
