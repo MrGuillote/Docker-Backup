@@ -11,11 +11,12 @@ NC='\033[0m' # No Color
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local input="$1"
-    input="${input//\\//}"
+    input="${input//\\/\/}"
     if [[ "$input" =~ ^[A-Za-z]: ]]; then
         drive="${input:0:1}"
         rest="${input:2}"
-        input="/mnt/${drive,,}/${rest#/}"
+        rest="${rest#/}"
+        input="/mnt/${drive,,}/$rest"
     fi
     echo "$input"
 }
@@ -28,19 +29,22 @@ function confirm_path() {
     [[ "$confirm" =~ ^[Ss]$ ]] && return 0 || return 1
 }
 
-# Backup
-function backup() {
+# Validar y confirmar una ruta
+function prompt_for_path() {
     while true; do
         echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
         read raw_path
         final_path=$(fix_windows_path "$raw_path")
         echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$final_path${NC}"
-        confirm_path "$final_path" && break
+        confirm_path "$final_path" && echo "$final_path" && return
         echo -e "${RED}❌ Ruta cancelada. Intentá de nuevo.${NC}"
     done
+}
 
+# Backup
+function backup() {
+    BACKUP_DIR_PUBLIC=$(prompt_for_path)
     BACKUP_DIR_ROOT="/root/backups_docker"
-    BACKUP_DIR_PUBLIC="$final_path"
     DATE=$(date +"%Y%m%d_%H%M%S")
     BACKUP_NAME="backup_$DATE"
     FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
