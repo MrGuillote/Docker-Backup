@@ -11,6 +11,7 @@ NC='\033[0m' # No Color
 # Configuración
 BACKUP_DIR_ROOT="/root/backups_docker"
 BACKUP_DIR_PUBLIC="/home/guquintana/backups_docker"
+MOUNT_DIR="/home/guquintana/docker_volumes_mounted"
 DATE=$(date +"%Y%m%d_%H%M%S")
 BACKUP_NAME="backup_$DATE"
 FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
@@ -38,11 +39,13 @@ function backup() {
     echo -e "${CYAN}🧱 Guardando contenedores activos...${NC}"
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
 
-    echo -e "${YELLOW}🔐 Ajustando permisos para acceso desde Windows...${NC}"
+    echo -e "${YELLOW}🔐 Ajustando permisos...${NC}"
     chown -R guquintana:guquintana "$FULL_BACKUP_PATH"
 
     echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible desde Windows...${NC}"
     cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
+    chown -R guquintana:guquintana "$BACKUP_DIR_PUBLIC"
+    chmod -R u+rwX,g+rwX,o+rX "$BACKUP_DIR_PUBLIC"
 
     echo -e "${GREEN}✅ Backup completado en: $FULL_BACKUP_PATH${NC}"
     echo -e "${BLUE}📁 Visible desde Windows: $BACKUP_DIR_PUBLIC/$BACKUP_NAME${NC}"
@@ -98,12 +101,35 @@ function restore() {
     echo -e "${GREEN}✅ Restauración completada.${NC}"
 }
 
+function montar_backup_dir() {
+    echo -e "${CYAN}🔗 Montando backup en /home/guquintana para exploración y edición...${NC}"
+    chown -R guquintana:guquintana "$BACKUP_DIR_PUBLIC"
+    chmod -R u+rwX,g+rwX,o+rX "$BACKUP_DIR_PUBLIC"
+    echo -e "${GREEN}✅ Permisos aplicados. Puedes explorar /home/guquintana/backups_docker en Ubuntu o desde Windows. ${NC}"
+}
+
+function montar_volumenes() {
+    echo -e "${CYAN}🔍 Montando todos los volúmenes Docker en $MOUNT_DIR...${NC}"
+    mkdir -p "$MOUNT_DIR"
+    for volume in $(docker volume ls -q); do
+        dest="$MOUNT_DIR/$volume"
+        mkdir -p "$dest"
+        docker run --rm -v "$volume":/source -v "$dest":/target alpine \
+            sh -c "cd /source && cp -a . /target"
+    done
+    chown -R guquintana:guquintana "$MOUNT_DIR"
+    chmod -R u+rwX,g+rwX,o+rX "$MOUNT_DIR"
+    echo -e "${GREEN}✅ Volúmenes montados en: $MOUNT_DIR${NC}"
+}
+
 function menu() {
     echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====\n${NC}"
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
     echo -e "${YELLOW}3)${NC} Salir"
     echo -e "${YELLOW}4)${NC} Eliminar este script y su carpeta"
+    echo -e "${YELLOW}5)${NC} Montar carpeta de backups con permisos de usuario"
+    echo -e "${YELLOW}6)${NC} Montar todos los volúmenes Docker como carpetas"
     echo -e "${BLUE}============================\n${NC}"
     echo -ne "${CYAN}Selecciona una opción: ${NC}"
     read opcion
@@ -120,6 +146,8 @@ function menu() {
             echo -e "${GREEN}✅ Eliminado.${NC}"
             exit 0
             ;;
+        5) montar_backup_dir ;;
+        6) montar_volumenes ;;
         *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
     esac
 }
