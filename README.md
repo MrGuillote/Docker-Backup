@@ -1,3 +1,4 @@
+
 # 🐳 Docker Backup Tool
 
 Una herramienta simple en Bash para realizar **backups completos y restauraciones** de tus entornos Docker. Ideal para entornos de desarrollo local con **WSL2 + Ubuntu**.
@@ -13,7 +14,9 @@ Con un menú interactivo, este script permite:
   - Volúmenes Docker (`tar.gz`)
   - Lista de contenedores activos
 - ♻️ **Restaurar backups** fácilmente desde una lista interactiva
+- 🔍 **Montar volúmenes Docker** automáticamente como carpetas visibles desde Windows
 - 🧽 **Eliminarse automáticamente** (opcional)
+- 🔁 **Resetear configuración**
 - 👀 Guarda todo en una carpeta accesible desde Windows
 
 ---
@@ -70,29 +73,13 @@ Abrí tu terminal de Ubuntu (WSL) y ejecutá este único comando:
 
 ---
 
-## 📁 Ubicación de los backups
+## 🧠 ¿Qué te pide el script la primera vez?
 
-- 🧱 Carpeta interna (protegida):  
-  `/root/backups_docker`
+1. 👤 **Usuario de Ubuntu** (ej: `guquintana`)
+2. 📁 **Carpeta donde guardar/restaurar backups** (sugerido: `/home/guquintana/backups_docker`)
+3. 🌐 **Carpeta donde montar volúmenes** (sugerido: `/home/guquintana/www-docker`)
 
-- 🪟 Carpeta accesible desde Windows:  
-  `/home/guquintana/backups_docker`
-
-> Accedé desde el explorador de archivos con:  
-> `\\wsl.localhost\Ubuntu\home\guquintana\backups_docker`
-
----
-
-## 🔄 Restaurar backup
-
-Cuando seleccionás la opción de restaurar, se te mostrará una **lista de backups disponibles** en `/home/guquintana/backups_docker`.
-
-El script automáticamente:
-
-1. Copia el backup a `/root/backups_docker`
-2. Restaura imágenes y volúmenes
-3. Limpia el backup temporal
-4. Finaliza
+🔐 La configuración queda guardada en `.docker_backup_config` y podés reiniciarla desde el menú.
 
 ---
 
@@ -102,19 +89,44 @@ El script automáticamente:
 ==== DOCKER BACKUP TOOL ====
 1) Hacer backup completo
 2) Restaurar backup
-3) Eliminar este script (auto-destruct)
-4) Salir
+3) Montar volúmenes Docker visibles desde Windows
+4) Resetear configuración
+5) Eliminar este script (auto-destruct)
+6) Salir
 ============================
 ```
 
 ---
 
-## 📦 Backup incluye:
+## 🗃️ Backup incluye:
 
 - Todas las imágenes (`docker save`)
 - Todos los volúmenes (`tar.gz`)
 - Lista de contenedores activos (`docker ps -a`)
-- Copia accesible para restaurar desde otra máquina
+- Copia accesible desde Windows para restaurar desde otra máquina
+
+---
+
+## 🔄 Restaurar backup
+
+El script:
+
+1. Te muestra una lista de backups disponibles
+2. Copia el backup a `/root/backups_docker`
+3. Restaura imágenes y volúmenes
+4. Limpia temporales
+
+---
+
+## 🌍 Volúmenes montados visibles desde Windows
+
+Los volúmenes son copiados a `/home/<usuario>/www-docker`, accesibles desde:
+
+```
+\\wsl.localhost\Ubuntu\home\guquintana\www-docker
+```
+
+> Así podés ver archivos de WordPress u otros volúmenes como si fueran carpetas locales.
 
 ---
 
