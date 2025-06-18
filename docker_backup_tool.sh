@@ -16,12 +16,11 @@ BACKUP_NAME="backup_$DATE"
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local path="$1"
-    path="${path//\\/}"
+    path="${path//'\\'/'/'}"  # Reemplaza \ por /
     if [[ "$path" =~ ^[A-Za-z]: ]]; then
         local drive_letter="${path:0:1}"
         local rest="${path:2}"
-        rest="${rest//\\/}"
-        path="/mnt/${drive_letter,,}/$rest"
+        path="/mnt/${drive_letter,,}${rest}"
     fi
     echo "$path"
 }
