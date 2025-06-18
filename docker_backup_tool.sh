@@ -142,7 +142,7 @@ function menu() {
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
     echo -e "${YELLOW}3)${NC} Montar volúmenes en $MOUNT_DIR"
-    echo -e "${YELLOW}4)${NC} Resetear configuración"
+    echo -e "${YELLOW}4)${NC} Resetear configuración Solo si cargaste mal las variables/rutas"
     echo -e "${YELLOW}5)${NC} Salir"
     echo -e "${BLUE}============================${NC}"
     echo -ne "${CYAN}Selecciona una opción: ${NC}"
