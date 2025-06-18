@@ -16,10 +16,11 @@ BACKUP_NAME="backup_$DATE"
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local path="$1"
-    path="${path//\\//}"
-    if [[ "$path" =~ ^[A-Za-z]:/ ]]; then
+    path="${path//\\/}"
+    if [[ "$path" =~ ^[A-Za-z]: ]]; then
         local drive_letter="${path:0:1}"
         local rest="${path:2}"
+        rest="${rest//\\/}"
         path="/mnt/${drive_letter,,}/$rest"
     fi
     echo "$path"
@@ -39,8 +40,8 @@ function confirm_path() {
 
 function backup() {
     echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
-    read dest_dir
-    dest_dir=$(fix_windows_path "$dest_dir")
+    read dest_dir_raw
+    dest_dir=$(fix_windows_path "$dest_dir_raw")
     echo -e "${YELLOW}📂 Ruta convertida a WSL: ${BLUE}$dest_dir${NC}"
 
     if ! confirm_path "$dest_dir"; then
