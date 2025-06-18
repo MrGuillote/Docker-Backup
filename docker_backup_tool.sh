@@ -13,6 +13,19 @@ BACKUP_DIR_ROOT="/root/backups_docker"
 DATE=$(date +"%Y%m%d_%H%M%S")
 BACKUP_NAME="backup_$DATE"
 
+# Verificar y/o instalar zenity si se desea soporte gráfico
+function ensure_zenity_installed() {
+    if ! command -v zenity &> /dev/null; then
+        echo -e "${YELLOW}🔍 Zenity no está instalado. Instalando...${NC}"
+        sudo apt update && sudo apt install -y zenity
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ Zenity instalado correctamente.${NC}"
+        else
+            echo -e "${RED}❌ Error al instalar zenity.${NC}"
+        fi
+    fi
+}
+
 # Función para convertir rutas de Windows a WSL
 function fix_windows_path() {
     local path="$1"
@@ -20,7 +33,9 @@ function fix_windows_path() {
     if [[ "$path" =~ ^[A-Za-z]: ]]; then
         local drive_letter="${path:0:1}"
         local rest="${path:2}"
-        path="/mnt/${drive_letter,,}${rest}"
+        path="/mnt/${drive_letter,,}/${rest}"
+        path="${path// /}" # Elimina espacios
+        path="${path//\"}" # Elimina comillas
     fi
     echo "$path"
 }
@@ -86,6 +101,7 @@ function backup() {
 }
 
 function menu() {
+    ensure_zenity_installed
     echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
     echo -e "${YELLOW}1)${NC} Hacer backup completo"
     echo -e "${YELLOW}2)${NC} Restaurar backup"
