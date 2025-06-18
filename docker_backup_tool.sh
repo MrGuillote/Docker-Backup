@@ -17,9 +17,10 @@ BACKUP_NAME="backup_$DATE"
 function fix_windows_path() {
     local path="$1"
     if [[ "$path" =~ ^[A-Za-z]:\\\\ ]]; then
-        path="${path//\\/\/}"
+        path="${path//\\//}"
         local drive_letter="${path:0:1}"
-        path="/mnt/${drive_letter,,}/${path:3}"
+        local rest="${path:2}"
+        path="/mnt/${drive_letter,,}/${rest}"
     fi
     echo "$path"
 }
@@ -28,6 +29,7 @@ function backup() {
     echo -ne "${CYAN}📁 ¿Dónde querés guardar el backup? (ej. /home/usuario/backups o D:\\Users\\usuario\\Downloads): ${NC}"
     read dest_dir
     dest_dir=$(fix_windows_path "$dest_dir")
+    echo -e "${YELLOW}📂 Ruta convertida a WSL: $dest_dir${NC}"
     mkdir -p "$BACKUP_DIR_ROOT"
     mkdir -p "$dest_dir"
 
