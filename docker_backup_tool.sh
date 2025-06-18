@@ -9,36 +9,18 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuración
-WSL_USER_HOME="/home/$(logname)"
 BACKUP_DIR_ROOT="/root/backups_docker"
-BACKUP_DIR_PUBLIC="$WSL_USER_HOME/backups_docker"
+BACKUP_DIR_PUBLIC="/home/guquintana/backups_docker"
 DATE=$(date +"%Y%m%d_%H%M%S")
 BACKUP_NAME="backup_$DATE"
 FULL_BACKUP_PATH="$BACKUP_DIR_ROOT/$BACKUP_NAME"
-LOG_FILE="$BACKUP_DIR_PUBLIC/last_backup.log"
 
 mkdir -p "$BACKUP_DIR_ROOT"
 mkdir -p "$BACKUP_DIR_PUBLIC"
 
-# Validar dependencias
-command -v docker &> /dev/null || { echo -e "${RED}❌ Docker no está instalado.${NC}"; exit 1; }
-
-# Banner
-function show_banner() {
-    echo -e "${BLUE}"
-    echo "██████╗  ██████╗  ██████╗██╗  ██╗███████╗██████╗ "
-    echo "██╔══██╗██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗"
-    echo "██████╔╝██║   ██║██║     █████╔╝ █████╗  ██████╔╝"
-    echo "██╔═══╝ ██║   ██║██║     ██╔═██╗ ██╔══╝  ██╔═══╝ "
-    echo "██║     ╚██████╔╝╚██████╗██║  ██╗███████╗██║     "
-    echo "╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     "
-    echo -e "${NC}"
-}
-
 function backup() {
-    exec > >(tee -i "$LOG_FILE") 2>&1
     echo -e "${CYAN}📋 Guardando lista de imágenes...${NC}"
-    docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v "<none>" > "$FULL_BACKUP_PATH-images.txt"
+    docker image ls --format '{{.Repository}}:{{.Tag}}' > "$FULL_BACKUP_PATH-images.txt"
 
     echo -e "${CYAN}📦 Exportando imágenes Docker...${NC}"
     mkdir -p "$FULL_BACKUP_PATH/images"
@@ -56,6 +38,9 @@ function backup() {
     echo -e "${CYAN}🧱 Guardando contenedores activos...${NC}"
     docker ps -a --format '{{.Names}}' > "$FULL_BACKUP_PATH-containers.txt"
 
+    echo -e "${YELLOW}🔐 Ajustando permisos para acceso desde Windows...${NC}"
+    chown -R guquintana:guquintana "$FULL_BACKUP_PATH"
+
     echo -e "${YELLOW}🚚 Moviendo backup a directorio accesible desde Windows...${NC}"
     cp -r "$FULL_BACKUP_PATH" "$BACKUP_DIR_PUBLIC"
 
@@ -72,7 +57,8 @@ function restore() {
         return
     fi
 
-    echo -e "\n${YELLOW}Seleccione el backup a restaurar:${NC}"
+    echo ""
+    echo -e "${YELLOW}Seleccione el backup a restaurar:${NC}"
     for i in "${!backups[@]}"; do
         echo -e "${BLUE}$((i+1))) ${backups[$i]}${NC}"
     done
@@ -113,32 +99,29 @@ function restore() {
 }
 
 function menu() {
-    while true; do
-        show_banner
-        echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====${NC}"
-        echo -e "${YELLOW}1)${NC} Hacer backup completo"
-        echo -e "${YELLOW}2)${NC} Restaurar backup"
-        echo -e "${YELLOW}3)${NC} Salir"
-        echo -e "${YELLOW}4)${NC} Eliminar este script y su carpeta"
-        echo -e "${BLUE}============================${NC}"
-        echo -ne "${CYAN}Selecciona una opción: ${NC}"
-        read opcion
-        case $opcion in
-            1) backup ;;
-            2) restore ;;
-            3) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
-            4)
-                SCRIPT_PATH="$(realpath "$0")"
-                SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-                echo -e "${RED}🗑️ Eliminando $SCRIPT_DIR ...${NC}"
-                cd ~ || exit
-                rm -rf "$SCRIPT_DIR"
-                echo -e "${GREEN}✅ Eliminado.${NC}"
-                exit 0
-                ;;
-            *) echo -e "${RED}❌ Opción no válida${NC}" ;;
-        esac
-    done
+    echo -e "\n${BLUE}==== DOCKER BACKUP TOOL ====\n${NC}"
+    echo -e "${YELLOW}1)${NC} Hacer backup completo"
+    echo -e "${YELLOW}2)${NC} Restaurar backup"
+    echo -e "${YELLOW}3)${NC} Salir"
+    echo -e "${YELLOW}4)${NC} Eliminar este script y su carpeta"
+    echo -e "${BLUE}============================\n${NC}"
+    echo -ne "${CYAN}Selecciona una opción: ${NC}"
+    read opcion
+    case $opcion in
+        1) backup ;;
+        2) restore ;;
+        3) echo -e "${GREEN}👋 Saliendo...${NC}"; exit 0 ;;
+        4)
+            SCRIPT_PATH="$(realpath "$0")"
+            SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+            echo -e "${RED}🗑️ Eliminando $SCRIPT_DIR ...${NC}"
+            cd ~ || exit
+            rm -rf "$SCRIPT_DIR"
+            echo -e "${GREEN}✅ Eliminado.${NC}"
+            exit 0
+            ;;
+        *) echo -e "${RED}❌ Opción no válida${NC}"; menu ;;
+    esac
 }
 
 menu
